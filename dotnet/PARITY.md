@@ -72,8 +72,9 @@ differences. The entries that are specific to .NET are marked.
   and cancels, as clack does on EOF. Keystrokes piped to stdin (for example
   `yes | skills add …`) are not interpreted.
 - **Startup time.** *(.NET)* On win-x64, `skills list` takes about 130 to
-  150 ms with the ReadyToRun single file. It takes about 35 ms with the Rust
-  binary and about 220 ms with the built npm CLI (`node bin/cli.mjs`).
+  150 ms with the ReadyToRun single file and about 60 ms with a NativeAOT
+  build. It takes about 35 ms with the Rust binary and about 220 ms with the
+  built npm CLI (`node bin/cli.mjs`).
 
 ## Not ported (unused by the CLI)
 

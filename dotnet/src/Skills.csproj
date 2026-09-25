@@ -11,22 +11,35 @@
     <Version>1.7.0</Version>
     <Description>The open agent skills ecosystem (C# port of the skills CLI)</Description>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Run the trim, AOT and single-file analyzers on every build. With
+         warnings as errors, code that would break under NativeAOT or trimming
+         fails `dotnet build`; ILLink and ILC inherit this on publish. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <!-- `dotnet publish -c Release -r <rid>` produces one self-contained executable. -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>true</PublishTrimmed>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <!-- Precompiled code: ~130 ms startup instead of ~320 ms (JIT) on win-x64.
-         -p:EnableCompressionInSingleFile=false trades ~10 MB for ~30 ms more. -->
-    <PublishReadyToRun>true</PublishReadyToRun>
     <DebugType>none</DebugType>
   </PropertyGroup>
+
+  <!-- Default: a trimmed ReadyToRun single file. Cross-publishes to any RID and
+       needs no native toolchain. About 130 ms startup instead of about 320 ms
+       with plain JIT on win-x64. -p:EnableCompressionInSingleFile=false trades
+       about 10 MB for about 30 ms less. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(PublishAot)' != 'true'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <!-- -p:PublishAot=true: a NativeAOT executable (about 9 MB, about 60 ms
+       startup). This needs the platform C/C++ toolchain (MSVC on Windows,
+       clang or gcc on Linux, Xcode on macOS) and builds only for the host OS. -->
 
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="18.1.0" />

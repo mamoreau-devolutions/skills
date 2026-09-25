@@ -29,6 +29,24 @@ with `-r` produces a trimmed, compressed, ReadyToRun single file of about
 takes about 35 ms and the built npm CLI about 220 ms. Pass
 `-p:EnableCompressionInSingleFile=false` to get about 100 ms at about 27 MB.
 
+### NativeAOT
+
+The port is NativeAOT-compatible. `IsAotCompatible` runs the trim, AOT and
+single-file analyzers on every build, and warnings are errors, so code that
+would break under AOT fails `dotnet build`. To publish a native executable
+(about 9 MB, about 60 ms for `skills list` on win-x64):
+
+```bash
+dotnet publish src/Skills.csproj -c Release -r win-x64 -p:PublishAot=true -o publish-aot
+```
+
+NativeAOT needs the platform toolchain: the Visual Studio "Desktop development
+with C++" workload on Windows, clang or gcc (plus zlib) on Linux, and Xcode on
+macOS. It builds only for the host OS. If the ILCompiler can't locate MSVC
+through `vswhere`, put `link.exe` on `PATH`, set `LIB` to the MSVC and Windows
+SDK library folders, and pass `-p:IlcUseEnvironmentalTools=true`. The win-x64
+NativeAOT build passes all 89 parity cases.
+
 Run `skills update` from a published executable or the `bin/` apphost
 (`skills.exe`), not through `dotnet skills.dll`. Update reinstalls changed
 skills by running the current process's executable with `add`.
