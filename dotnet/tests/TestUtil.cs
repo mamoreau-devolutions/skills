@@ -29,13 +29,13 @@ internal sealed class TempDir : IDisposable
 
 internal static class TestUtil
 {
-    /// The repository root (the directory holding package.json and dotnet/).
-    public static string RepoRoot()
+    /// The port's root (the directory holding Skills.sln).
+    public static string PortRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !(File.Exists(System.IO.Path.Combine(dir.FullName, "package.json")) && Directory.Exists(System.IO.Path.Combine(dir.FullName, "dotnet"))))
+        while (dir != null && !File.Exists(System.IO.Path.Combine(dir.FullName, "Skills.sln")))
             dir = dir.Parent;
-        return dir?.FullName ?? throw new InvalidOperationException("repository root not found");
+        return dir?.FullName ?? throw new InvalidOperationException("Skills.sln not found above the test output directory");
     }
 
     /// Build a minimal stored (uncompressed) zip.

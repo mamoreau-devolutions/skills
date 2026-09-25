@@ -77,7 +77,7 @@ impl<'a> Request<'a> {
         let agent = ureq::AgentBuilder::new()
             .timeout(self.timeout)
             .redirects(20)
-            .user_agent("node")
+            .user_agent(concat!("skills-cli/", env!("CARGO_PKG_VERSION")))
             .build();
         let mut req = agent.get(self.url);
         for (k, v) in &self.headers {

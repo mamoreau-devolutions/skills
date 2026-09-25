@@ -246,12 +246,12 @@ fn build_github_auth_error(url: &str, repo: Option<&GitHubRepoInfo>, message: &s
     if let Some(repo) = repo {
         if is_github_sso_auth_error(message) {
             return format!(
-                "GitHub blocked HTTPS access to {} because the organization enforces SAML SSO.\n  skills tried your existing git credentials and available fallbacks, but none succeeded.\n  - Re-authorize your GitHub credentials/app for that org's SSO policy\n  - Or rerun with SSH: npx skills add {}\n  - Verify access with: gh auth status -h {} or ssh -T git@{}",
+                "GitHub blocked HTTPS access to {} because the organization enforces SAML SSO.\n  skills tried your existing git credentials and available fallbacks, but none succeeded.\n  - Re-authorize your GitHub credentials/app for that org's SSO policy\n  - Or rerun with SSH: skills add {}\n  - Verify access with: gh auth status -h {} or ssh -T git@{}",
                 url, repo.ssh_url, host, host
             );
         }
         return format!(
-            "Authentication failed for {}.\n  - For private repos, ensure you have access\n  - Retry with SSH: npx skills add {}\n  - Check access with: gh auth status -h {} or ssh -T git@{}",
+            "Authentication failed for {}.\n  - For private repos, ensure you have access\n  - Retry with SSH: skills add {}\n  - Check access with: gh auth status -h {} or ssh -T git@{}",
             url, repo.ssh_url, host, host
         );
     }

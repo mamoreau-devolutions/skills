@@ -122,10 +122,10 @@ internal static partial class AddCommand
             Sys.OutLine($"{Pc.BgRed(Pc.White(Pc.Bold(" ERROR ")))} {Pc.Red("Missing required argument: source")}");
             Sys.OutLine();
             Sys.OutLine(Pc.Dim("  Usage:"));
-            Sys.OutLine($"    {Pc.Cyan("npx skills add")} {Pc.Yellow("<source>")} {Pc.Dim("[options]")}");
+            Sys.OutLine($"    {Pc.Cyan("skills add")} {Pc.Yellow("<source>")} {Pc.Dim("[options]")}");
             Sys.OutLine();
             Sys.OutLine(Pc.Dim("  Example:"));
-            Sys.OutLine($"    {Pc.Cyan("npx skills add")} {Pc.Yellow("vercel-labs/agent-skills")}");
+            Sys.OutLine($"    {Pc.Cyan("skills add")} {Pc.Yellow("vercel-labs/agent-skills")}");
             Sys.OutLine();
             ctx.Exit(1, "Missing required argument: source");
         }
@@ -839,7 +839,7 @@ internal static partial class AddCommand
         }
         else if (answer == false)
         {
-            Ui.Log.Message(Pc.Dim("You can install it later with: npx skills add vercel-labs/skills@find-skills"));
+            Ui.Log.Message(Pc.Dim("You can install it later with: skills add vercel-labs/skills@find-skills"));
         }
     }
 

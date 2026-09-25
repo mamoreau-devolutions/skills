@@ -473,6 +473,9 @@ function ConvertTo-Normalized([string]$Text, $sb) {
     $Text = $Text -replace 'skills-(download-|use-|notion-)?[A-Za-z0-9]{6}', 'skills-$1XXXXXX'
     $Text = $Text -replace '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z', '<TS>'
     $Text = $Text.Replace("`r`n", "`n")
+    # The ports are standalone executables, so their hints say `skills …`
+    # where the npm CLI says `npx skills …`.
+    $Text = $Text.Replace('npx skills', 'skills')
     # Spinner animation frames depend on timing; drop them (each frame ends
     # with the clear sequence ESC[1G ESC[J).
     do {

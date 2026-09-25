@@ -20,6 +20,11 @@ cargo test                     # unit tests
 
 Rust 1.80+ is required (developed with 1.98).
 
+This folder is self-contained. It builds and tests without the TypeScript CLI
+or Node.js next to it, and only the parity harness needs them. The version comes
+from `Cargo.toml`. When the crate sits next to the TypeScript CLI, a unit test
+also checks it against `../package.json`.
+
 ## Usage
 
 Identical to the npm CLI:

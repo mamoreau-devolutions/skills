@@ -7,7 +7,8 @@
     <Nullable>enable</Nullable>
     <AssemblyName>skills</AssemblyName>
     <RootNamespace>Skills</RootNamespace>
-    <!-- Keep in sync with ../../package.json (a unit test enforces this). -->
+    <!-- Must equal Program.Version in Main.cs (unit-tested; also checked against
+         ../../package.json when the port sits next to the TypeScript CLI). -->
     <Version>1.7.0</Version>
     <Description>The open agent skills ecosystem (C# port of the skills CLI)</Description>
     <InvariantGlobalization>true</InvariantGlobalization>

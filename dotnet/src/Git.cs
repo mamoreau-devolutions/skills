@@ -182,12 +182,12 @@ internal static partial class Git
             return $"GitHub blocked HTTPS access to {url} because the organization enforces SAML SSO.\n" +
                    "  skills tried your existing git credentials and available fallbacks, but none succeeded.\n" +
                    "  - Re-authorize your GitHub credentials/app for that org's SSO policy\n" +
-                   $"  - Or rerun with SSH: npx skills add {repo.SshUrl}\n" +
+                   $"  - Or rerun with SSH: skills add {repo.SshUrl}\n" +
                    $"  - Verify access with: gh auth status -h {host} or ssh -T git@{host}";
         if (repo != null)
             return $"Authentication failed for {url}.\n" +
                    "  - For private repos, ensure you have access\n" +
-                   $"  - Retry with SSH: npx skills add {repo.SshUrl}\n" +
+                   $"  - Retry with SSH: skills add {repo.SshUrl}\n" +
                    $"  - Check access with: gh auth status -h {host} or ssh -T git@{host}";
         return $"Authentication failed for {url}.\n" +
                "  - For private repos, ensure you have access\n" +

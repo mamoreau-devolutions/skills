@@ -309,7 +309,7 @@ pub fn run_find(args: &[String]) {
         for e in &errors {
             errln!("{}", e);
         }
-        errln!("Usage: npx skills find <query> [--owner <owner>]");
+        errln!("Usage: skills find <query> [--owner <owner>]");
         return;
     }
 
@@ -335,7 +335,7 @@ pub fn run_find(args: &[String]) {
             return;
         }
         outln!(
-            "{}Install with{} npx skills add <owner/repo@skill>",
+            "{}Install with{} skills add <owner/repo@skill>",
             DIM,
             RESET
         );
@@ -372,14 +372,14 @@ pub fn run_find(args: &[String]) {
             RESET
         );
         outln!(
-            "{}  1) npx skills find [query] [--owner <owner>]{}",
+            "{}  1) skills find [query] [--owner <owner>]{}",
             DIM,
             RESET
         );
-        outln!("{}  2) npx skills add <owner/repo@skill>{}", DIM, RESET);
+        outln!("{}  2) skills add <owner/repo@skill>{}", DIM, RESET);
         outln!();
         outln!(
-            "{}Usage: npx skills find <query> [--owner <owner>]{}",
+            "{}Usage: skills find <query> [--owner <owner>]{}",
             DIM,
             RESET
         );

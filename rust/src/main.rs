@@ -78,64 +78,64 @@ fn show_banner() {
     outln!("{}The open agent skills ecosystem{}", DIM, RESET);
     outln!();
     outln!(
-        "  {d}${r} {t}npx skills add {d}<package>{r}        {d}Add a new skill{r}",
+        "  {d}${r} {t}skills add {d}<package>{r}        {d}Add a new skill{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!(
-        "  {d}${r} {t}npx skills use {d}<package>@<skill>{r} {d}Use a skill without installing{r}",
+        "  {d}${r} {t}skills use {d}<package>@<skill>{r} {d}Use a skill without installing{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!(
-        "  {d}${r} {t}npx skills remove{r}               {d}Remove installed skills{r}",
+        "  {d}${r} {t}skills remove{r}               {d}Remove installed skills{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!(
-        "  {d}${r} {t}npx skills list{r}                 {d}List installed skills{r}",
+        "  {d}${r} {t}skills list{r}                 {d}List installed skills{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!(
-        "  {d}${r} {t}npx skills find {d}[query]{r}         {d}Search for skills{r}",
-        d = DIM,
-        r = RESET,
-        t = TEXT
-    );
-    outln!();
-    outln!(
-        "  {d}${r} {t}npx skills update{r}               {d}Update installed skills{r}",
+        "  {d}${r} {t}skills find {d}[query]{r}         {d}Search for skills{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!();
     outln!(
-        "  {d}${r} {t}npx skills experimental_install{r} {d}Restore from skills-lock.json{r}",
-        d = DIM,
-        r = RESET,
-        t = TEXT
-    );
-    outln!(
-        "  {d}${r} {t}npx skills init {d}[name]{r}          {d}Create a new skill{r}",
-        d = DIM,
-        r = RESET,
-        t = TEXT
-    );
-    outln!(
-        "  {d}${r} {t}npx skills experimental_sync{r}    {d}Sync skills from node_modules{r}",
+        "  {d}${r} {t}skills update{r}               {d}Update installed skills{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!();
     outln!(
-        "{}try:{} npx skills add vercel-labs/agent-skills",
+        "  {d}${r} {t}skills experimental_install{r} {d}Restore from skills-lock.json{r}",
+        d = DIM,
+        r = RESET,
+        t = TEXT
+    );
+    outln!(
+        "  {d}${r} {t}skills init {d}[name]{r}          {d}Create a new skill{r}",
+        d = DIM,
+        r = RESET,
+        t = TEXT
+    );
+    outln!(
+        "  {d}${r} {t}skills experimental_sync{r}    {d}Sync skills from node_modules{r}",
+        d = DIM,
+        r = RESET,
+        t = TEXT
+    );
+    outln!();
+    outln!(
+        "{}try:{} skills add vercel-labs/agent-skills",
         DIM,
         RESET
     );
@@ -349,13 +349,13 @@ fn run_init(args: &[String]) {
     outln!();
     outln!("{}Publishing:{}", DIM, RESET);
     outln!(
-        "  {d}GitHub:{r}  Push to a repo, then {t}npx skills add <owner>/<repo>{r}",
+        "  {d}GitHub:{r}  Push to a repo, then {t}skills add <owner>/<repo>{r}",
         d = DIM,
         r = RESET,
         t = TEXT
     );
     outln!(
-        "  {d}URL:{r}     Host the file, then {t}npx skills add https://example.com/{p}{r}",
+        "  {d}URL:{r}     Host the file, then {t}skills add https://example.com/{p}{r}",
         d = DIM,
         r = RESET,
         t = TEXT,
@@ -477,11 +477,20 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    /// The version comes from Cargo.toml. When the crate sits next to the
+    /// TypeScript CLI it tracks, also check that the two versions agree; a
+    /// standalone checkout has no package.json and skips that comparison.
     #[test]
-    fn version_matches_package_json() {
-        let pkg = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../package.json"))
-            .unwrap();
+    fn version_matches_package_json_when_present() {
+        assert!(!super::VERSION.is_empty());
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../package.json");
+        let Ok(pkg) = std::fs::read_to_string(path) else {
+            return;
+        };
         let v: serde_json::Value = serde_json::from_str(&pkg).unwrap();
+        if v["name"].as_str() != Some("skills") {
+            return;
+        }
         assert_eq!(
             v["version"].as_str().unwrap(),
             super::VERSION,

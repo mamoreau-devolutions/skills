@@ -138,7 +138,7 @@ internal static class UpdateCommand
         {
             var names = string.Join(", ", skills.Select(x => Sanitize.Metadata(x.Name)));
             Sys.OutLine($"  {Text}•{Reset} {names} {Dim}({skills[0].Reason}){Reset}");
-            Sys.OutLine($"    {Dim}To update: {Text}npx skills add {source} -g -y{Reset}");
+            Sys.OutLine($"    {Dim}To update: {Text}skills add {source} -g -y{Reset}");
         }
     }
 
@@ -227,7 +227,7 @@ internal static class UpdateCommand
         if (newSkills.Count == 0) return;
         var names = newSkills.Select(Sanitize.Metadata).ToList();
         Sys.OutLine($"  {Dim}{newSkills.Count} new skill(s) available from this source:{Reset} {string.Join(", ", names)}");
-        Sys.OutLine($"    {Dim}To install: {Text}npx skills add {baseUrl} --skill {string.Join(" ", names)}{(isGlobal ? " -g" : "")}{Reset}");
+        Sys.OutLine($"    {Dim}To install: {Text}skills add {baseUrl} --skill {string.Join(" ", names)}{(isGlobal ? " -g" : "")}{Reset}");
     }
 
     private static string? CliEntry() => Environment.ProcessPath is { } p && File.Exists(p) ? p : null;
@@ -329,7 +329,7 @@ internal static class UpdateCommand
             if (o.Skills == null)
             {
                 Sys.OutLine($"{Dim}No global skills tracked in lock file.{Reset}");
-                Sys.OutLine($"{Dim}Install skills with{Reset} {Text}npx skills add <package> -g{Reset}");
+                Sys.OutLine($"{Dim}Install skills with{Reset} {Text}skills add <package> -g{Reset}");
             }
             return (0, 0, 0);
         }
@@ -513,7 +513,7 @@ internal static class UpdateCommand
             var reinstall = UpdateSource.BuildLocalUpdateSource(UpdateSourceEntry.FromJson(sk.Entry));
             Sys.OutLine($"  {Text}•{Reset} {Sanitize.Metadata(sk.Name)}");
             Sys.OutLine(reinstall != null
-                ? $"    {Dim}To refresh: {Text}npx skills add {reinstall} -y{Reset}"
+                ? $"    {Dim}To refresh: {Text}skills add {reinstall} -y{Reset}"
                 : $"    {Dim}To refresh: reinstall using the original full Git URL; this lock entry only has an ambiguous shorthand.{Reset}");
         }
     }
@@ -529,7 +529,7 @@ internal static class UpdateCommand
             if (o.Skills == null)
             {
                 Sys.OutLine($"{Dim}No project skills to update.{Reset}");
-                Sys.OutLine($"{Dim}Install project skills with{Reset} {Text}npx skills add <package>{Reset}");
+                Sys.OutLine($"{Dim}Install project skills with{Reset} {Text}skills add <package>{Reset}");
             }
             return (0, 0, 0);
         }

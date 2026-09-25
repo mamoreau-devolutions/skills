@@ -7,9 +7,21 @@ namespace Skills.Tests;
 public class VersionTests
 {
     [Fact]
-    public void VersionMatchesPackageJson()
+    public void VersionMatchesProject()
     {
-        var pkg = Json.Parse(File.ReadAllText(Path.Combine(TestUtil.RepoRoot(), "package.json")));
+        var csproj = System.Xml.Linq.XDocument.Load(Path.Combine(TestUtil.PortRoot(), "src", "Skills.csproj"));
+        Assert.Equal(Program.Version, csproj.Descendants("Version").Single().Value);
+    }
+
+    /// When the port sits next to the TypeScript CLI it tracks, the versions
+    /// must agree; a standalone checkout has no package.json and skips this.
+    [Fact]
+    public void VersionMatchesPackageJsonWhenPresent()
+    {
+        var path = Path.Combine(TestUtil.PortRoot(), "..", "package.json");
+        if (!File.Exists(path)) return;
+        var pkg = Json.Parse(File.ReadAllText(path));
+        if (Json.Str(pkg, "name") != "skills") return;
         Assert.Equal(Program.Version, Json.Str(pkg, "version"));
     }
 }

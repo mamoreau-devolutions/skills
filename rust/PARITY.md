@@ -23,6 +23,11 @@ identically; the harness in `parity/` enforces that for the cases it covers.
   on a terminal; the start/stop lines (and cursor hide/show codes) still match.
 - **`update` re-invocation.** Changed skills are reinstalled by running this
   executable's own `add` command, not `node bin/cli.mjs add`.
+- **Standalone command hints.** The port is its own executable, so help,
+  tips and error hints say `skills …` where the npm CLI says `npx skills …`.
+  The harness maps the TS wording before comparing.
+- **User agent.** HTTP requests send `skills-cli/<version>` instead of
+  Node's `node`. GitHub tree requests already set `skills-cli` in both.
 
 ## Unavoidable or approximated
 

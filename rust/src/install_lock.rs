@@ -15,7 +15,7 @@ pub fn run_install_from_lock(args: &[String]) {
         log::warn("No project skills found in skills-lock.json");
         log::info(&format!(
             "Add project-level skills with {} (without {})",
-            pc::cyan("npx skills add <package>"),
+            pc::cyan("skills add <package>"),
             pc::cyan("-g")
         ));
         return;

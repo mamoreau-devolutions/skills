@@ -1228,7 +1228,7 @@ pub fn run_add(args: &[String], mut options: AddOptions) {
         outln!("{}", pc::dim("  Usage:"));
         outln!(
             "    {} {} {}",
-            pc::cyan("npx skills add"),
+            pc::cyan("skills add"),
             pc::yellow("<source>"),
             pc::dim("[options]")
         );
@@ -1236,7 +1236,7 @@ pub fn run_add(args: &[String], mut options: AddOptions) {
         outln!("{}", pc::dim("  Example:"));
         outln!(
             "    {} {}",
-            pc::cyan("npx skills add"),
+            pc::cyan("skills add"),
             pc::yellow("vercel-labs/agent-skills")
         );
         outln!();
@@ -2480,7 +2480,7 @@ fn prompt_for_find_skills(options: &AddOptions, target_agents: &[AgentType]) {
         Some(false) => {
             let _ = dismiss_prompt("findSkillsPrompt");
             log::message(&pc::dim(
-                "You can install it later with: npx skills add vercel-labs/skills@find-skills",
+                "You can install it later with: skills add vercel-labs/skills@find-skills",
             ));
         }
     }

@@ -242,7 +242,7 @@ pub fn print_skipped_skills(skipped: &[SkippedSkill]) {
             );
         }
         outln!(
-            "    {}To update: {}npx skills add {} -g -y{}",
+            "    {}To update: {}skills add {} -g -y{}",
             DIM,
             TEXT,
             source,
@@ -452,7 +452,7 @@ fn print_new_skills(base_url: &str, new_skills: &[String], is_global: bool) {
         names.join(", ")
     );
     outln!(
-        "    {}To install: {}npx skills add {} --skill {}{}{}",
+        "    {}To install: {}skills add {} --skill {}{}{}",
         DIM,
         TEXT,
         base_url,
@@ -597,7 +597,7 @@ fn update_global_skills(o: &UpdateOptions) -> (usize, usize, usize) {
         if o.skills.is_none() {
             outln!("{}No global skills tracked in lock file.{}", DIM, RESET);
             outln!(
-                "{}Install skills with{} {}npx skills add <package> -g{}",
+                "{}Install skills with{} {}skills add <package> -g{}",
                 DIM,
                 RESET,
                 TEXT,
@@ -847,7 +847,7 @@ fn print_legacy_project_skills(legacy: &[&ProjectSkill]) {
         let reinstall = build_local_update_source(&UpdateSourceEntry::from_json(&sk.entry));
         outln!("  {}•{} {}", TEXT, RESET, sanitize_metadata(&sk.name));
         match reinstall {
-            Some(r) => outln!("    {}To refresh: {}npx skills add {} -y{}", DIM, TEXT, r, RESET),
+            Some(r) => outln!("    {}To refresh: {}skills add {} -y{}", DIM, TEXT, r, RESET),
             None => outln!("    {}To refresh: reinstall using the original full Git URL; this lock entry only has an ambiguous shorthand.{}", DIM, RESET),
         }
     }
@@ -860,7 +860,7 @@ fn update_project_skills(o: &UpdateOptions) -> (usize, usize, usize) {
         if o.skills.is_none() {
             outln!("{}No project skills to update.{}", DIM, RESET);
             outln!(
-                "{}Install project skills with{} {}npx skills add <package>{}",
+                "{}Install project skills with{} {}skills add <package>{}",
                 DIM,
                 RESET,
                 TEXT,

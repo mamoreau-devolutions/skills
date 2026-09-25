@@ -137,8 +137,13 @@ Supporting files stand in for Node built-ins and npm packages:
 
 ## Tests
 
-- `tests/`: xUnit tests (73) ported from the Rust unit tests, plus a check
-  that `Program.Version` matches `../package.json`.
+- `tests/`: 74 xUnit tests, ported from the Rust unit tests. They include a
+  check that `Program.Version` matches the csproj `<Version>`. When the port
+  sits next to the TypeScript CLI, they also check it against
+  `../package.json`.
+
+This folder is self-contained. It builds, tests and publishes without the
+TypeScript CLI or Node.js next to it. Only the parity harness needs them.
 - [`parity/parity.ps1`](parity/parity.ps1) (PowerShell 7) runs the shared
   harness in [`../rust/parity/parity.ps1`](../rust/parity/parity.ps1) against
   `publish/skills(.exe)`. The harness runs the TypeScript CLI and the port in

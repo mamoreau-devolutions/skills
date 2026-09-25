@@ -31,6 +31,11 @@ differences. The entries that are specific to .NET are marked.
   `node bin/cli.mjs add`. *(.NET)* Under `dotnet skills.dll` the process path is
   the `dotnet` host, so updates must run from the apphost or published
   executable.
+- **Standalone command hints.** The port is its own executable, so help,
+  tips and error hints say `skills …` where the npm CLI says `npx skills …`.
+  The harness maps the TS wording before comparing.
+- **User agent.** HTTP requests send `skills-cli/<version>` instead of
+  Node's `node`. GitHub tree requests already set `skills-cli` in both.
 
 ## Unavoidable or approximated
 

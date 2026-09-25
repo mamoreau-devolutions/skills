@@ -1,7 +1,7 @@
 // Minimal blocking HTTP client standing in for the global `fetch`.
 //
 // Like Node's fetch: no system proxy, redirects followed, gzip/deflate/br
-// decoded, User-Agent "node" unless a request sets its own.
+// decoded, User-Agent "skills-cli/<version>" unless a request sets its own.
 
 using System.Net;
 using System.Text;
@@ -106,7 +106,7 @@ internal sealed class HttpRequest(string url)
             if (k.Equals("User-Agent", StringComparison.OrdinalIgnoreCase)) hasUa = true;
             req.Headers.TryAddWithoutValidation(k, v);
         }
-        if (!hasUa) req.Headers.TryAddWithoutValidation("User-Agent", "node");
+        if (!hasUa) req.Headers.TryAddWithoutValidation("User-Agent", $"skills-cli/{Program.Version}");
         using var resp = await Client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
         var status = (int)resp.StatusCode;
         var headers = new Dictionary<string, string>();

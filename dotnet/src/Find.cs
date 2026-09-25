@@ -223,7 +223,7 @@ internal static partial class FindCommand
         if (errors.Count > 0)
         {
             foreach (var e in errors) Sys.ErrLine(e);
-            Sys.ErrLine("Usage: npx skills find <query> [--owner <owner>]");
+            Sys.ErrLine("Usage: skills find <query> [--owner <owner>]");
             return;
         }
 
@@ -237,7 +237,7 @@ internal static partial class FindCommand
                 Sys.OutLine($"{Dim}No skills found for \"{query}\"{suffix}{Reset}");
                 return;
             }
-            Sys.OutLine($"{Dim}Install with{Reset} npx skills add <owner/repo@skill>");
+            Sys.OutLine($"{Dim}Install with{Reset} skills add <owner/repo@skill>");
             Sys.OutLine();
             foreach (var s in results)
             {
@@ -253,10 +253,10 @@ internal static partial class FindCommand
         if (nonInteractive || DetectAgent.IsRunningInAgent())
         {
             Sys.OutLine($"{Dim}Tip: if running in a coding agent, follow these steps:{Reset}");
-            Sys.OutLine($"{Dim}  1) npx skills find [query] [--owner <owner>]{Reset}");
-            Sys.OutLine($"{Dim}  2) npx skills add <owner/repo@skill>{Reset}");
+            Sys.OutLine($"{Dim}  1) skills find [query] [--owner <owner>]{Reset}");
+            Sys.OutLine($"{Dim}  2) skills add <owner/repo@skill>{Reset}");
             Sys.OutLine();
-            Sys.OutLine($"{Dim}Usage: npx skills find <query> [--owner <owner>]{Reset}");
+            Sys.OutLine($"{Dim}Usage: skills find <query> [--owner <owner>]{Reset}");
             return;
         }
 
