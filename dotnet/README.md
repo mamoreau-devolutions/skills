@@ -1,0 +1,143 @@
+# skills (C# port)
+
+A self-contained, single-executable C# (.NET 10) port of the `skills` CLI whose
+TypeScript source lives in [`../src`](../src). The TypeScript code is unchanged
+and remains the reference implementation. This port follows its behavior
+command by command, like the [Rust port](../rust), and is checked against it by
+the same side-by-side parity harness.
+
+The published executable bundles the .NET runtime, so it has no runtime
+dependencies (no Node.js, no installed .NET). Like the TypeScript CLI, it runs
+only these external tools: `git` for cloning, and optionally `gh` (GitHub CLI
+auth fallbacks), `ntn` (Notion), and `claude`/`codex`/`sarvam-code` for
+`skills use --agent`.
+
+## Build
+
+```bash
+cd dotnet
+dotnet build                                                   # debug build (bin/)
+dotnet test                                                    # unit tests
+dotnet publish src/Skills.csproj -c Release -r win-x64 -o publish   # → publish/skills.exe
+```
+
+This needs the .NET 10 SDK. Use any runtime identifier for `-r`, for example
+`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64` or `osx-arm64`.
+Cross-publishing works from any host and needs no native toolchain. A publish
+with `-r` produces a trimmed, compressed, ReadyToRun single file of about
+17 MB. On win-x64, `skills list` takes about 130 to 150 ms. The Rust binary
+takes about 35 ms and the built npm CLI about 220 ms. Pass
+`-p:EnableCompressionInSingleFile=false` to get about 100 ms at about 27 MB.
+
+Run `skills update` from a published executable or the `bin/` apphost
+(`skills.exe`), not through `dotnet skills.dll`. Update reinstalls changed
+skills by running the current process's executable with `add`.
+
+## Usage
+
+The commands are the same as the npm CLI's:
+
+```bash
+skills add vercel-labs/agent-skills
+skills add ./my-skills -y -a claude-code cursor
+skills add owner/repo --json -y
+skills use vercel-labs/skills@find-skills
+skills list --json
+skills remove my-skill -y
+skills update -g -y
+skills find typescript
+skills init my-skill
+skills experimental_install
+skills experimental_sync -y
+```
+
+`skills --help` prints the full reference.
+
+## Layout
+
+Each file ports the TypeScript module (and the Rust module) of the same name:
+
+| TypeScript (`../src`)                        | C# (`src/`)                                        |
+| -------------------------------------------- | -------------------------------------------------- |
+| `cli.ts`                                     | `Main.cs`                                          |
+| `add.ts`                                     | `AddHelpers.cs`, `AddWellKnown.cs`, `AddRun.cs`    |
+| `agents.ts`, `types.ts`                      | `Agents.cs`, `Types.cs`                            |
+| `archive.ts`                                 | `Archive.cs`                                       |
+| `blob.ts`                                    | `Blob.cs`                                          |
+| `detect-agent.ts` (+ `@vercel/detect-agent`) | `DetectAgent.cs`                                   |
+| `download-source.ts`                         | `DownloadSource.cs`                                |
+| `find.ts`                                    | `Find.cs`                                          |
+| `frontmatter.ts` (+ `yaml`)                  | `Frontmatter.cs`                                   |
+| `git.ts` (+ `simple-git`)                    | `Git.cs`                                           |
+| `github-host.ts`                             | `GitHubHost.cs`                                    |
+| `install.ts`                                 | `InstallLock.cs`                                   |
+| `installer.ts`                               | `Installer.cs`                                     |
+| `list.ts`                                    | `List.cs`                                          |
+| `local-lock.ts`                              | `LocalLock.cs`                                     |
+| `notion-test.ts`                             | `Notion.cs`                                        |
+| `plugin-manifest.ts`                         | `PluginManifest.cs`                                |
+| `prompts/search-multiselect.ts`              | `SearchMultiselect.cs`                             |
+| `providers/wellknown.ts`                     | `WellKnown.cs`                                     |
+| `remove.ts`                                  | `Remove.cs`                                        |
+| `sanitize.ts`                                | `Sanitize.cs`                                      |
+| `skill-lock.ts`                              | `SkillLock.cs`                                     |
+| `skill-relocation.ts`, `update-source.ts`    | `UpdateSource.cs`                                  |
+| `skills.ts`                                  | `Skills.cs`                                        |
+| `source-parser.ts`                           | `SourceParser.cs`                                  |
+| `sync.ts`                                    | `Sync.cs`                                          |
+| `telemetry.ts`                               | `Telemetry.cs`                                     |
+| `update.ts`                                  | `Update.cs`                                        |
+| `use.ts`                                     | `Use.cs`                                           |
+
+Supporting files stand in for Node built-ins and npm packages:
+
+- `NodePath.cs`: Node's `path` semantics (`join`, `resolve`, `normalize`,
+  `relative`, posix and win32). The TS code checks for path traversal by
+  comparing normalized path strings by prefix, so the port reproduces those
+  rules exactly instead of using `System.IO.Path`.
+- `Sys.cs`: `os.homedir()` and `os.tmpdir()` (libuv rules), `process.exit`
+  semantics with exit hooks, Windows console VT mode, and stdout routing.
+  `add --json` sends all human-readable output to stderr, so stdout carries
+  exactly one JSON value.
+- `Fs.cs`: `fs` behavior the CLI depends on. On Windows, directory links are
+  created as junctions (`FSCTL_SET_REPARSE_POINT`), as Node does, and
+  removing a link never touches its target.
+- `Json.cs`: `JSON.parse` and `JSON.stringify`, byte for byte (number
+  formatting, escaping), over `System.Text.Json.Nodes`, plus JS object key
+  order (integer-like keys first).
+- `Color.cs`: `picocolors` (including its nested-style handling and its
+  "always color on Windows" detection) and `util.styleText` as clack uses it.
+- `Ui.cs`: the `@clack/prompts` subset (intro, outro, log, note, spinner,
+  select, confirm, multiselect), including `wrap-ansi` wrapping and clack's
+  "Canceled" handler for an exit during a spinner.
+- `Collate.cs`: an approximation of `localeCompare` (ICU root collation). It
+  is needed because the TS CLI sorts files with `localeCompare` before hashing
+  them into the `computedHash` in `skills-lock.json`.
+- `Http.cs`, `Proc.cs`, `WebUrl.cs`: `fetch` (no proxy, as Node's), `execFile`
+  and `spawn` with timeouts and output caps, and `encodeURIComponent`,
+  `URLSearchParams` and WHATWG URL parsing.
+
+## Tests
+
+- `tests/`: xUnit tests (73) ported from the Rust unit tests, plus a check
+  that `Program.Version` matches `../package.json`.
+- [`parity/parity.ps1`](parity/parity.ps1) (PowerShell 7) runs the shared
+  harness in [`../rust/parity/parity.ps1`](../rust/parity/parity.ps1) against
+  `publish/skills(.exe)`. The harness runs the TypeScript CLI and the port in
+  fresh, identical sandboxes. It compares exit codes, stdout, stderr and the
+  resulting file trees, including symlinks, junctions and lock-file contents.
+
+```bash
+pnpm install && pnpm build          # once, at the repo root (update cases need dist/)
+dotnet publish dotnet/src/Skills.csproj -c Release -r win-x64 -o dotnet/publish
+pwsh dotnet/parity/parity.ps1                        # offline cases
+pwsh dotnet/parity/parity.ps1 -Network               # + GitHub / skills.sh cases
+pwsh dotnet/parity/parity.ps1 -Filter add -ShowOutput
+```
+
+Current status: all 89 cases pass (78 offline, 11 network) on Windows. The
+network cases use the anonymous GitHub API (60 requests per hour). If a
+network case fails, rerun it before suspecting a regression. The linux-x64
+build was smoke-tested under WSL (Ubuntu 24.04): `init`, `add`, `list` and
+`remove`. The osx-arm64 build is compiled but has not been run.
+Intentional and known differences are listed in [PARITY.md](PARITY.md).
