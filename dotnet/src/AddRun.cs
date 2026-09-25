@@ -105,6 +105,7 @@ internal static partial class AddCommand
 
     public static void Run(List<string> args, AddOptions options)
     {
+        Installer.ResetPopulated();
         var source = args.FirstOrDefault();
         var jsonMode = options.Json;
         var ctx = new AddCtx(jsonMode);

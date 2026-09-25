@@ -109,6 +109,7 @@ internal static class SyncCommand
 
     public static void Run(SyncOptions options)
     {
+        Installer.ResetPopulated();
         var cwd = Sys.Cwd();
         var agentResult = DetectAgent.Detect();
         if (agentResult.IsAgent)

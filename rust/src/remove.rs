@@ -57,6 +57,7 @@ pub fn resolve_skills_to_remove(
 }
 
 pub fn remove_command(mut skill_names: Vec<String>, mut options: RemoveOptions) {
+    crate::installer::reset_populated();
     let agent_result = detect_agent();
     if agent_result.is_agent() {
         options.yes = true;

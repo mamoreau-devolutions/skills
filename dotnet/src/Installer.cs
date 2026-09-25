@@ -89,8 +89,68 @@ internal static partial class Installer
 
     private static void CleanAndCreateDirectory(string path)
     {
+        Forget(path);
         try { Fs.RemoveAll(path); } catch { /* mkdir will fail if there's a real problem */ }
         Directory.CreateDirectory(path);
+    }
+
+    // ─── Populated directories ───
+    //
+    // The TS installer cleans and re-copies the canonical directory once per
+    // target agent, and every universal agent shares that directory, so a
+    // 20-agent install copies each skill 20 times. Remember which directories
+    // this run already filled from which source and skip identical refills: the
+    // resulting tree is the same, only the redundant I/O is gone.
+
+    private sealed record PopulatedFrom(string? SourceDir, List<SnapshotFile>? Files, bool Eve)
+    {
+        public bool SameAs(PopulatedFrom o) => SourceDir == o.SourceDir && ReferenceEquals(Files, o.Files) && Eve == o.Eve;
+    }
+
+    private static readonly Dictionary<string, PopulatedFrom> Populated = new(StringComparer.Ordinal);
+
+    /// Start a new install run: forget every directory populated so far.
+    public static void ResetPopulated()
+    {
+        lock (Populated) Populated.Clear();
+    }
+
+    private static void Forget(string dir)
+    {
+        lock (Populated) Populated.Remove(NodePath.Resolve(dir));
+    }
+
+    private static bool AlreadyPopulated(string dir, PopulatedFrom from)
+    {
+        lock (Populated)
+            return Populated.TryGetValue(NodePath.Resolve(dir), out var prev) && prev.SameAs(from) && Fs.IsDir(dir);
+    }
+
+    private static void MarkPopulated(string dir, PopulatedFrom from)
+    {
+        lock (Populated) Populated[NodePath.Resolve(dir)] = from;
+    }
+
+    /// Clean `dest` and copy the skill directory `src` into it, unless this run
+    /// already did exactly that.
+    private static void PopulateFromDirectory(string dest, string src, string? agentType)
+    {
+        var from = new PopulatedFrom(NodePath.Resolve(src), null, agentType == "eve");
+        if (AlreadyPopulated(dest, from)) return;
+        CleanAndCreateDirectory(dest);
+        CopyDirectory(src, dest, agentType);
+        MarkPopulated(dest, from);
+    }
+
+    /// Clean `dest` and write the in-memory `files` into it, unless this run
+    /// already did exactly that.
+    private static void PopulateFromFiles(string dest, List<SnapshotFile> files, string agentType)
+    {
+        var from = new PopulatedFrom(null, files, agentType == "eve");
+        if (AlreadyPopulated(dest, from)) return;
+        CleanAndCreateDirectory(dest);
+        WriteFiles(dest, files, agentType);
+        MarkPopulated(dest, from);
     }
 
     private static string ResolveParentSymlinks(string p)
@@ -111,6 +171,7 @@ internal static partial class Installer
             var realLink = Fs.RealPath(resolvedLink) ?? resolvedLink;
             if (realTarget == realLink) return true;
             if (ResolveParentSymlinks(target) == ResolveParentSymlinks(linkPath)) return true;
+            Forget(linkPath);
             if (Fs.LExists(linkPath))
             {
                 if (Fs.IsSymlink(linkPath) && Fs.ReadLink(linkPath) is { } existing
@@ -159,19 +220,49 @@ internal static partial class Installer
     }
 
     /// Recursive copy following links, with no exclusions (cp dereference+recursive).
-    private static void CpDereference(string src, string dest)
+    /// Directories are created now; files are queued in `files`.
+    private static void CpDereference(string src, string dest, List<(string Src, string Dest)> files)
     {
         if (Fs.IsDir(src))
         {
             Directory.CreateDirectory(dest);
-            foreach (var e in Fs.ReadDir(src)) CpDereference(e.FullPath, NodePath.Join(dest, e.Name));
+            foreach (var e in Fs.ReadDir(src)) CpDereference(e.FullPath, NodePath.Join(dest, e.Name), files);
             return;
         }
         if (!Fs.IsFile(src)) throw new FileNotFoundException($"ENOENT: no such file or directory, stat '{src}'");
-        Fs.CopyFile(src, dest);
+        files.Add((src, dest));
     }
 
+    /// Copy a skill directory. The tree walk (exclusions, links, Eve rewrites,
+    /// directory creation) is sequential; file copies then run in parallel, as
+    /// the TS implementation's concurrent `copyDirectory` does.
     private static void CopyDirectory(string src, string dest, string? agentType)
+    {
+        var files = new List<(string Src, string Dest)>();
+        CollectDirectory(src, dest, agentType, files);
+        ForEachParallel(files, f => Fs.CopyFile(f.Src, f.Dest));
+    }
+
+    /// Run `action` over `items`, in parallel when there are enough of them.
+    /// The first failure is rethrown unwrapped so callers' catch filters apply.
+    private static void ForEachParallel<T>(IReadOnlyList<T> items, Action<T> action)
+    {
+        if (items.Count < 16)
+        {
+            foreach (var item in items) action(item);
+            return;
+        }
+        try
+        {
+            Parallel.ForEach(items, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 16) }, action);
+        }
+        catch (AggregateException ae) when (ae.InnerExceptions.Count > 0)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerExceptions[0]).Throw();
+        }
+    }
+
+    private static void CollectDirectory(string src, string dest, string? agentType, List<(string Src, string Dest)> files)
     {
         Directory.CreateDirectory(dest);
         foreach (var e in Fs.ReadDir(src))
@@ -180,7 +271,7 @@ internal static partial class Installer
             var destPath = NodePath.Join(dest, e.Name);
             if (e.IsDirectory)
             {
-                CopyDirectory(e.FullPath, destPath, agentType);
+                CollectDirectory(e.FullPath, destPath, agentType, files);
                 continue;
             }
             if (agentType == "eve" && e.Name.ToLowerInvariant() == "skill.md")
@@ -190,7 +281,7 @@ internal static partial class Installer
             }
             try
             {
-                CpDereference(e.FullPath, destPath);
+                CpDereference(e.FullPath, destPath, files);
             }
             catch (FileNotFoundException) when (e.IsSymlink)
             {
@@ -275,21 +366,18 @@ internal static partial class Installer
             if (PathsOverlap(skill.Path, d.AgentDir)) return new InstallResult { Success = true, Path = d.AgentDir, Mode = mode, Skipped = true };
             if (mode == InstallMode.Copy)
             {
-                CleanAndCreateDirectory(d.AgentDir);
-                CopyDirectory(skill.Path, d.AgentDir, agentType);
+                PopulateFromDirectory(d.AgentDir, skill.Path, agentType);
                 return InstallResult.Ok(d.AgentDir, null, InstallMode.Copy);
             }
             if (PathsOverlap(skill.Path, d.CanonicalDir))
                 return new InstallResult { Success = true, Path = d.CanonicalDir, CanonicalPath = d.CanonicalDir, Mode = InstallMode.Symlink, Skipped = true };
-            CleanAndCreateDirectory(d.CanonicalDir);
-            CopyDirectory(skill.Path, d.CanonicalDir, agentType);
+            PopulateFromDirectory(d.CanonicalDir, skill.Path, agentType);
             if (isGlobal && Agents.IsUniversalAgent(agentType)) return InstallResult.Ok(d.CanonicalDir, d.CanonicalDir, InstallMode.Symlink);
             if (ShouldSkipProjectAgentSymlink(agentType, isGlobal, cwd, o.CreateMissingAgentRoot))
                 return new InstallResult { Success = true, Path = d.CanonicalDir, CanonicalPath = d.CanonicalDir, Mode = InstallMode.Symlink, Skipped = true, SkipReason = "missing-agent-project-directory" };
             if (!CreateSymlink(d.CanonicalDir, d.AgentDir))
             {
-                CleanAndCreateDirectory(d.AgentDir);
-                CopyDirectory(skill.Path, d.AgentDir, agentType);
+                PopulateFromDirectory(d.AgentDir, skill.Path, agentType);
                 return new InstallResult { Success = true, Path = d.AgentDir, CanonicalPath = d.CanonicalDir, Mode = InstallMode.Symlink, SymlinkFailed = true };
             }
             return InstallResult.Ok(d.AgentDir, d.CanonicalDir, InstallMode.Symlink);
@@ -302,19 +390,24 @@ internal static partial class Installer
 
     private static void WriteFiles(string targetDir, IEnumerable<SnapshotFile> files, string agentType)
     {
+        // Snapshot paths are unique, so after creating the parent directories
+        // in order the writes are independent and can run in parallel.
+        var writes = new List<(string Path, SnapshotFile File)>();
         foreach (var f in files)
         {
             var full = NodePath.Join(targetDir, f.Path);
             if (!NodePath.IsPathSafe(targetDir, full)) continue;
             var parent = NodePath.Dirname(full);
             if (parent != targetDir) Directory.CreateDirectory(parent);
-            if (agentType == "eve" && NodePath.Basename(f.Path).ToLowerInvariant() == "skill.md")
-            {
-                File.WriteAllText(full, StripIgnoredEveFrontmatter(Encoding.UTF8.GetString(f.Contents)));
-                continue;
-            }
-            File.WriteAllBytes(full, f.Contents);
+            writes.Add((full, f));
         }
+        ForEachParallel(writes, w =>
+        {
+            if (agentType == "eve" && NodePath.Basename(w.File.Path).ToLowerInvariant() == "skill.md")
+                File.WriteAllText(w.Path, StripIgnoredEveFrontmatter(Encoding.UTF8.GetString(w.File.Contents)));
+            else
+                File.WriteAllBytes(w.Path, w.File.Contents);
+        });
     }
 
     /// Install an in-memory skill (well-known or blob snapshot).
@@ -331,19 +424,16 @@ internal static partial class Installer
         {
             if (mode == InstallMode.Copy)
             {
-                CleanAndCreateDirectory(d.AgentDir);
-                WriteFiles(d.AgentDir, files, agentType);
+                PopulateFromFiles(d.AgentDir, files, agentType);
                 return InstallResult.Ok(d.AgentDir, null, InstallMode.Copy);
             }
-            CleanAndCreateDirectory(d.CanonicalDir);
-            WriteFiles(d.CanonicalDir, files, agentType);
+            PopulateFromFiles(d.CanonicalDir, files, agentType);
             if (isGlobal && Agents.IsUniversalAgent(agentType)) return InstallResult.Ok(d.CanonicalDir, d.CanonicalDir, InstallMode.Symlink);
             if (skipMissingProjectDirs && ShouldSkipProjectAgentSymlink(agentType, isGlobal, cwd, o.CreateMissingAgentRoot))
                 return new InstallResult { Success = true, Path = d.CanonicalDir, CanonicalPath = d.CanonicalDir, Mode = InstallMode.Symlink, Skipped = true, SkipReason = "missing-agent-project-directory" };
             if (!CreateSymlink(d.CanonicalDir, d.AgentDir))
             {
-                CleanAndCreateDirectory(d.AgentDir);
-                WriteFiles(d.AgentDir, files, agentType);
+                PopulateFromFiles(d.AgentDir, files, agentType);
                 return new InstallResult { Success = true, Path = d.AgentDir, CanonicalPath = d.CanonicalDir, Mode = InstallMode.Symlink, SymlinkFailed = true };
             }
             return InstallResult.Ok(d.AgentDir, d.CanonicalDir, InstallMode.Symlink);

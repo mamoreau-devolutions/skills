@@ -29,6 +29,7 @@ internal static class RemoveCommand
 
     public static void Run(List<string> skillNames, RemoveOptions options)
     {
+        Installer.ResetPopulated();
         var agentResult = DetectAgent.Detect();
         if (agentResult.IsAgent)
         {

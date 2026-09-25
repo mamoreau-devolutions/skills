@@ -334,11 +334,7 @@ pub fn run_find(args: &[String]) {
             );
             return;
         }
-        outln!(
-            "{}Install with{} skills add <owner/repo@skill>",
-            DIM,
-            RESET
-        );
+        outln!("{}Install with{} skills add <owner/repo@skill>", DIM, RESET);
         outln!();
         for s in &results {
             let pkg = if s.source.is_empty() {
@@ -371,11 +367,7 @@ pub fn run_find(args: &[String]) {
             DIM,
             RESET
         );
-        outln!(
-            "{}  1) skills find [query] [--owner <owner>]{}",
-            DIM,
-            RESET
-        );
+        outln!("{}  1) skills find [query] [--owner <owner>]{}", DIM, RESET);
         outln!("{}  2) skills add <owner/repo@skill>{}", DIM, RESET);
         outln!();
         outln!(

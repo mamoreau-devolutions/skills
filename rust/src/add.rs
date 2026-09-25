@@ -1200,6 +1200,7 @@ fn group_by_plugin<T>(items: &[T], plugin: impl Fn(&T) -> Option<&str>) -> Group
 }
 
 pub fn run_add(args: &[String], mut options: AddOptions) {
+    crate::installer::reset_populated();
     let source = args.first().cloned();
     let json_mode = options.json;
     let mut ctx = AddCtx {

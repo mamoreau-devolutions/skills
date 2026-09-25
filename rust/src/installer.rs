@@ -11,7 +11,10 @@ use crate::skills::parse_skill_md;
 use crate::sys;
 use crate::types::{Skill, SnapshotFile, AGENTS_DIR, SKILLS_SUBDIR};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InstallMode {
@@ -189,8 +192,128 @@ pub fn get_agent_base_dir(
 }
 
 fn clean_and_create_directory(path: &str) -> std::io::Result<()> {
+    forget_populated(path);
     let _ = remove_all(path);
     std::fs::create_dir_all(path)
+}
+
+// ─── Populated directories ───
+//
+// The TS installer cleans and re-copies the canonical directory once per
+// target agent, and every universal agent shares that directory, so a
+// 20-agent install copies each skill 20 times. Remember which directories
+// this run already filled from which source and skip identical refills: the
+// resulting tree is the same, only the redundant I/O is gone.
+
+#[derive(Clone, PartialEq, Debug)]
+enum PopulatedFrom {
+    /// Resolved source directory; whether Eve frontmatter was rewritten.
+    Dir(String, bool),
+    /// Identity (address, length) of the in-memory file list; Eve flag.
+    Files(usize, usize, bool),
+}
+
+static POPULATED: Mutex<Option<HashMap<String, PopulatedFrom>>> = Mutex::new(None);
+
+/// Start a new install run: forget every directory populated so far.
+pub fn reset_populated() {
+    *POPULATED.lock().unwrap() = None;
+}
+
+fn forget_populated(dir: &str) {
+    if let Some(m) = POPULATED.lock().unwrap().as_mut() {
+        m.remove(&paths::resolve1(dir));
+    }
+}
+
+fn already_populated(dir: &str, from: &PopulatedFrom) -> bool {
+    let hit = POPULATED
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|m| m.get(&paths::resolve1(dir)))
+        .map(|prev| prev == from)
+        .unwrap_or(false);
+    hit && Path::new(dir).is_dir()
+}
+
+fn mark_populated(dir: &str, from: PopulatedFrom) {
+    POPULATED
+        .lock()
+        .unwrap()
+        .get_or_insert_with(HashMap::new)
+        .insert(paths::resolve1(dir), from);
+}
+
+/// Clean `dest` and copy the skill directory `src` into it, unless this run
+/// already did exactly that.
+fn populate_from_directory(
+    dest: &str,
+    src: &str,
+    agent_type: Option<AgentType>,
+) -> std::io::Result<()> {
+    let from = PopulatedFrom::Dir(paths::resolve1(src), agent_type == Some("eve"));
+    if already_populated(dest, &from) {
+        return Ok(());
+    }
+    clean_and_create_directory(dest)?;
+    copy_directory(src, dest, agent_type)?;
+    mark_populated(dest, from);
+    Ok(())
+}
+
+/// Clean `dest` and write the in-memory `files` into it, unless this run
+/// already did exactly that.
+fn populate_from_files(
+    dest: &str,
+    files: &[SnapshotFile],
+    agent_type: AgentType,
+) -> std::io::Result<()> {
+    let from = PopulatedFrom::Files(files.as_ptr() as usize, files.len(), agent_type == "eve");
+    if already_populated(dest, &from) {
+        return Ok(());
+    }
+    clean_and_create_directory(dest)?;
+    write_files(dest, files, agent_type)?;
+    mark_populated(dest, from);
+    Ok(())
+}
+
+/// Run `f` over `items`, on a small worker pool when there are enough of them.
+/// Stops at, and returns, the first error.
+fn for_each_parallel<T: Sync>(
+    items: &[T],
+    f: impl Fn(&T) -> std::io::Result<()> + Sync,
+) -> std::io::Result<()> {
+    if items.len() < 16 {
+        return items.iter().try_for_each(f);
+    }
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(2, 16);
+    let next = AtomicUsize::new(0);
+    let first_err: Mutex<Option<std::io::Error>> = Mutex::new(None);
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| loop {
+                if first_err.lock().unwrap().is_some() {
+                    break;
+                }
+                let Some(item) = items.get(next.fetch_add(1, Ordering::Relaxed)) else {
+                    break;
+                };
+                if let Err(e) = f(item) {
+                    first_err.lock().unwrap().get_or_insert(e);
+                    break;
+                }
+            });
+        }
+    });
+    match first_err.into_inner().unwrap() {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 fn realpath(p: &str) -> Option<String> {
@@ -248,6 +371,7 @@ fn create_symlink(target: &str, link_path: &str) -> bool {
     if resolve_parent_symlinks(target) == resolve_parent_symlinks(link_path) {
         return true;
     }
+    forget_populated(link_path);
     if let Ok(m) = std::fs::symlink_metadata(link_path) {
         if m.file_type().is_symlink() {
             if let Ok(existing) = std::fs::read_link(link_path) {
@@ -325,23 +449,42 @@ fn copy_file_preserving_mode(src: &str, dest: &str) -> std::io::Result<()> {
 }
 
 /// Recursive copy of a directory following symlinks, with no exclusions
-/// (Node's `cp(..., { dereference: true, recursive: true })`).
-fn cp_dereference(src: &str, dest: &str) -> std::io::Result<()> {
+/// (Node's `cp(..., { dereference: true, recursive: true })`). Directories are
+/// created now; files are queued in `files`.
+fn cp_dereference(src: &str, dest: &str, files: &mut Vec<(String, String)>) -> std::io::Result<()> {
     let meta = std::fs::metadata(src)?;
     if meta.is_dir() {
         std::fs::create_dir_all(dest)?;
         for e in std::fs::read_dir(src)? {
             let e = e?;
             let name = e.file_name().to_string_lossy().to_string();
-            cp_dereference(&join(&[src, name.as_str()]), &join(&[dest, name.as_str()]))?;
+            cp_dereference(
+                &join(&[src, name.as_str()]),
+                &join(&[dest, name.as_str()]),
+                files,
+            )?;
         }
-        Ok(())
     } else {
-        copy_file_preserving_mode(src, dest)
+        files.push((src.to_string(), dest.to_string()));
     }
+    Ok(())
 }
 
+/// Copy a skill directory. The tree walk (exclusions, links, Eve rewrites,
+/// directory creation) is sequential; file copies then run in parallel, as
+/// the TS implementation's concurrent `copyDirectory` does.
 fn copy_directory(src: &str, dest: &str, agent_type: Option<AgentType>) -> std::io::Result<()> {
+    let mut files = Vec::new();
+    collect_directory(src, dest, agent_type, &mut files)?;
+    for_each_parallel(&files, |(s, d)| copy_file_preserving_mode(s, d))
+}
+
+fn collect_directory(
+    src: &str,
+    dest: &str,
+    agent_type: Option<AgentType>,
+    files: &mut Vec<(String, String)>,
+) -> std::io::Result<()> {
     std::fs::create_dir_all(dest)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
@@ -353,7 +496,7 @@ fn copy_directory(src: &str, dest: &str, agent_type: Option<AgentType>) -> std::
         let src_path = join(&[src, name.as_str()]);
         let dest_path = join(&[dest, name.as_str()]);
         if ft.is_dir() {
-            copy_directory(&src_path, &dest_path, agent_type)?;
+            collect_directory(&src_path, &dest_path, agent_type, files)?;
             continue;
         }
         if agent_type == Some("eve") && name.to_lowercase() == "skill.md" {
@@ -361,7 +504,7 @@ fn copy_directory(src: &str, dest: &str, agent_type: Option<AgentType>) -> std::
             std::fs::write(&dest_path, strip_ignored_eve_frontmatter(&content))?;
             continue;
         }
-        match cp_dereference(&src_path, &dest_path) {
+        match cp_dereference(&src_path, &dest_path, files) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && ft.is_symlink() => {
                 crate::errln!("Skipping broken symlink: {}", src_path);
@@ -556,8 +699,7 @@ pub fn install_skill_for_agent(
             return Ok(r);
         }
         if mode == InstallMode::Copy {
-            clean_and_create_directory(&d.agent_dir).map_err(io_err)?;
-            copy_directory(&skill.path, &d.agent_dir, Some(agent_type)).map_err(io_err)?;
+            populate_from_directory(&d.agent_dir, &skill.path, Some(agent_type)).map_err(io_err)?;
             return Ok(InstallResult::ok(&d.agent_dir, None, InstallMode::Copy));
         }
         if paths_overlap(&skill.path, &d.canonical_dir) {
@@ -569,8 +711,7 @@ pub fn install_skill_for_agent(
             r.skipped = true;
             return Ok(r);
         }
-        clean_and_create_directory(&d.canonical_dir).map_err(io_err)?;
-        copy_directory(&skill.path, &d.canonical_dir, Some(agent_type)).map_err(io_err)?;
+        populate_from_directory(&d.canonical_dir, &skill.path, Some(agent_type)).map_err(io_err)?;
         if is_global && is_universal_agent(agent_type) {
             return Ok(InstallResult::ok(
                 &d.canonical_dir,
@@ -594,8 +735,7 @@ pub fn install_skill_for_agent(
             return Ok(r);
         }
         if !create_symlink(&d.canonical_dir, &d.agent_dir) {
-            clean_and_create_directory(&d.agent_dir).map_err(io_err)?;
-            copy_directory(&skill.path, &d.agent_dir, Some(agent_type)).map_err(io_err)?;
+            populate_from_directory(&d.agent_dir, &skill.path, Some(agent_type)).map_err(io_err)?;
             let mut r =
                 InstallResult::ok(&d.agent_dir, Some(&d.canonical_dir), InstallMode::Symlink);
             r.symlink_failed = true;
@@ -615,6 +755,9 @@ fn write_files(
     files: &[SnapshotFile],
     agent_type: AgentType,
 ) -> std::io::Result<()> {
+    // Snapshot paths are unique, so after creating the parent directories in
+    // order the writes are independent and can run in parallel.
+    let mut writes: Vec<(String, &SnapshotFile)> = Vec::new();
     for f in files {
         let full = join(&[target_dir, f.path.as_str()]);
         if !is_path_safe(target_dir, &full) {
@@ -624,15 +767,16 @@ fn write_files(
         if parent != target_dir {
             std::fs::create_dir_all(&parent)?;
         }
+        writes.push((full, f));
+    }
+    for_each_parallel(&writes, |(full, f)| {
         if agent_type == "eve" && paths::basename(&f.path).to_lowercase() == "skill.md" {
             if let Ok(text) = std::str::from_utf8(&f.contents) {
-                std::fs::write(&full, strip_ignored_eve_frontmatter(text))?;
-                continue;
+                return std::fs::write(full, strip_ignored_eve_frontmatter(text));
             }
         }
-        std::fs::write(&full, &f.contents)?;
-    }
-    Ok(())
+        std::fs::write(full, &f.contents)
+    })
 }
 
 /// Install an in-memory skill (well-known or blob snapshot).
@@ -668,12 +812,10 @@ fn install_files(
     }
     let run = || -> Result<InstallResult, String> {
         if mode == InstallMode::Copy {
-            clean_and_create_directory(&d.agent_dir).map_err(io_err)?;
-            write_files(&d.agent_dir, files, agent_type).map_err(io_err)?;
+            populate_from_files(&d.agent_dir, files, agent_type).map_err(io_err)?;
             return Ok(InstallResult::ok(&d.agent_dir, None, InstallMode::Copy));
         }
-        clean_and_create_directory(&d.canonical_dir).map_err(io_err)?;
-        write_files(&d.canonical_dir, files, agent_type).map_err(io_err)?;
+        populate_from_files(&d.canonical_dir, files, agent_type).map_err(io_err)?;
         if is_global && is_universal_agent(agent_type) {
             return Ok(InstallResult::ok(
                 &d.canonical_dir,
@@ -699,8 +841,7 @@ fn install_files(
             return Ok(r);
         }
         if !create_symlink(&d.canonical_dir, &d.agent_dir) {
-            clean_and_create_directory(&d.agent_dir).map_err(io_err)?;
-            write_files(&d.agent_dir, files, agent_type).map_err(io_err)?;
+            populate_from_files(&d.agent_dir, files, agent_type).map_err(io_err)?;
             let mut r =
                 InstallResult::ok(&d.agent_dir, Some(&d.canonical_dir), InstallMode::Symlink);
             r.symlink_failed = true;
@@ -1117,5 +1258,59 @@ mod tests {
             "my-skill",
             "SKILL.md"
         ])));
+    }
+
+    #[test]
+    fn shared_canonical_dir_is_copied_once_per_run() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().to_string_lossy().to_string();
+        let src = join(&[root.as_str(), "src", "big"]);
+        std::fs::create_dir_all(join(&[src.as_str(), "ref"])).unwrap();
+        std::fs::write(
+            join(&[src.as_str(), "SKILL.md"]),
+            "---
+name: big
+description: d
+---
+",
+        )
+        .unwrap();
+        for i in 0..40 {
+            std::fs::write(
+                join(&[src.as_str(), "ref", &format!("{}.md", i)]),
+                format!("file {}", i),
+            )
+            .unwrap();
+        }
+        let project = join(&[root.as_str(), "project"]);
+        std::fs::create_dir_all(&project).unwrap();
+        let skill = Skill {
+            name: "big".into(),
+            description: "d".into(),
+            path: src,
+            ..Default::default()
+        };
+        let opts = InstallOptions {
+            cwd: Some(project.clone()),
+            mode: Some(InstallMode::Symlink),
+            ..Default::default()
+        };
+        let marker = join(&[project.as_str(), ".agents", "skills", "big", "ref", "0.md"]);
+
+        reset_populated();
+        assert!(install_skill_for_agent(&skill, "codex", &opts).success);
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "file 0");
+        let refs = join(&[project.as_str(), ".agents", "skills", "big", "ref"]);
+        assert_eq!(std::fs::read_dir(&refs).unwrap().count(), 40);
+
+        // A second universal agent in the same run reuses the populated directory.
+        std::fs::write(&marker, "untouched").unwrap();
+        assert!(install_skill_for_agent(&skill, "cursor", &opts).success);
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "untouched");
+
+        // A new run starts from scratch and copies again.
+        reset_populated();
+        assert!(install_skill_for_agent(&skill, "cursor", &opts).success);
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "file 0");
     }
 }

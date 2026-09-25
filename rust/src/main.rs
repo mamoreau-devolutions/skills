@@ -134,11 +134,7 @@ fn show_banner() {
         t = TEXT
     );
     outln!();
-    outln!(
-        "{}try:{} skills add vercel-labs/agent-skills",
-        DIM,
-        RESET
-    );
+    outln!("{}try:{} skills add vercel-labs/agent-skills", DIM, RESET);
     outln!();
     outln!(
         "Discover more skills at {}https://skills.sh/{}",

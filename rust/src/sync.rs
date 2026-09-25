@@ -118,6 +118,7 @@ fn discover_node_module_skills(cwd: &str) -> Vec<(Skill, String)> {
 }
 
 pub fn run_sync(_args: &[String], mut options: SyncOptions) {
+    crate::installer::reset_populated();
     let cwd = sys::cwd();
     let agent_result = detect_agent();
     if agent_result.is_agent() {

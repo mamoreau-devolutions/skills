@@ -28,6 +28,11 @@ identically; the harness in `parity/` enforces that for the cases it covers.
   The harness maps the TS wording before comparing.
 - **User agent.** HTTP requests send `skills-cli/<version>` instead of
   Node's `node`. GitHub tree requests already set `skills-cli` in both.
+- **One copy per install target directory.** TS cleans and re-copies the
+  shared `.agents/skills/<skill>` directory once per target agent, about 20
+  times for a default install. The ports copy each skill once per run, copy
+  files in parallel, and produce the same tree. A 155 MB, 2,900-file skill
+  installs in about 17 s instead of about 110 s (TS) on Windows.
 
 ## Unavoidable or approximated
 

@@ -172,6 +172,37 @@ public class InstallerTests
     }
 }
 
+public class PopulateOnceTests
+{
+    [Fact]
+    public void SharedCanonicalDirIsCopiedOncePerRun()
+    {
+        using var t = new TempDir();
+        t.Write("src/big/SKILL.md", "---\nname: big\ndescription: d\n---\n");
+        for (var i = 0; i < 40; i++) t.Write($"src/big/ref/{i}.md", $"file {i}");
+        var project = t.Join("project");
+        Directory.CreateDirectory(project);
+        var skill = new Skill { Name = "big", Description = "d", Path = t.Join("src", "big") };
+        var opts = new InstallOptions { Cwd = project, Mode = InstallMode.Symlink };
+        var marker = NodePath.Join(project, ".agents", "skills", "big", "ref", "0.md");
+
+        Installer.ResetPopulated();
+        Assert.True(Installer.InstallSkillForAgent(skill, "codex", opts).Success);
+        Assert.Equal("file 0", File.ReadAllText(marker));
+        Assert.Equal(40, Directory.GetFiles(NodePath.Join(project, ".agents", "skills", "big", "ref")).Length);
+
+        // A second universal agent in the same run reuses the populated directory.
+        File.WriteAllText(marker, "untouched");
+        Assert.True(Installer.InstallSkillForAgent(skill, "cursor", opts).Success);
+        Assert.Equal("untouched", File.ReadAllText(marker));
+
+        // A new run starts from scratch and copies again.
+        Installer.ResetPopulated();
+        Assert.True(Installer.InstallSkillForAgent(skill, "cursor", opts).Success);
+        Assert.Equal("file 0", File.ReadAllText(marker));
+    }
+}
+
 public class UiTests
 {
     [Fact]
